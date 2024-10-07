@@ -40,7 +40,7 @@ function fetchWeatherData(position) {
     const apiUrl = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
 
     // Use your AWS proxy server URL
-    const proxyUrl = 'https://x47ozxapli.execute-api.ap-southeast-2.amazonaws.com/Irrigationproxyfunction'; // Replace with your actual proxy URL
+    const proxyUrl = 'https://tw4vpstu41.execute-api.ap-southeast-2.amazonaws.com/Irrigationproxyfunction'; // Replace with your actual proxy URL
 
     fetch(proxyUrl, {
         method: 'POST',
