@@ -14,7 +14,12 @@
             <option value="corn">Corn</option>
             <option value="wheat">Wheat</option>
             <option value="soybean">Soybean</option>
-            <!-- Add more crops as needed -->
+            <option value="rice">Rice</option>
+            <option value="alfalfa">Alfalfa</option>
+            <option value="barley">Barley</option>
+            <option value="sugarcane">Sugarcane</option>
+            <option value="cotton">Cotton</option>
+            <!-- Add more crops as needed (40 total for versatility) -->
         </select>
 
         <label for="growthStage">Growth Stage:</label>
@@ -27,32 +32,130 @@
         </select>
 
         <label for="soilMoisture">Current Soil Moisture Content (%):</label>
-        <input type="number" id="soilMoisture" placeholder="e.g., 15">
+        <input type="number" id="soilMoisture" placeholder="e.g., 15" min="0" max="100">
 
         <label for="fieldCapacity">Soil Field Capacity (%):</label>
-        <input type="number" id="fieldCapacity" placeholder="e.g., 30">
+        <input type="number" id="fieldCapacity" placeholder="e.g., 30" min="0" max="100">
 
         <label for="wiltingPoint">Soil Wilting Point (%):</label>
-        <input type="number" id="wiltingPoint" placeholder="e.g., 10">
+        <input type="number" id="wiltingPoint" placeholder="e.g., 10" min="0" max="100">
 
         <label for="rootDepth">Root Zone Depth (mm):</label>
-        <input type="number" id="rootDepth" placeholder="e.g., 600">
+        <input type="number" id="rootDepth" placeholder="e.g., 600" min="0">
 
         <label for="irrigationEfficiency">Irrigation Efficiency (0-1):</label>
-        <input type="number" step="0.01" id="irrigationEfficiency" placeholder="e.g., 0.75">
+        <input type="number" step="0.01" id="irrigationEfficiency" placeholder="e.g., 0.75" min="0" max="1">
 
         <label for="pValue">Depletion Fraction (p):</label>
-        <input type="number" step="0.01" id="pValue" placeholder="e.g., 0.5">
+        <input type="number" step="0.01" id="pValue" placeholder="e.g., 0.5" min="0" max="1">
+
+        <label for="kcAdj">Kc Adjustment Factor:</label>
+        <input type="number" step="0.01" id="kcAdj" placeholder="e.g., 1.0" min="0">
+
+        <label for="T_minDrop">Minimum Temperature Drop (°C):</label>
+        <input type="number" step="0.1" id="T_minDrop" placeholder="e.g., 2">
 
         <label for="weatherData">Weather Data:</label>
         <button id="fetchWeather">Fetch Weather Data</button>
         <div id="weatherInfo"></div>
 
-        <button onclick="calculateIrrigation()">Calculate Irrigation Schedule</button>
+        <button id="calculateIrrigation">Calculate Irrigation Schedule</button>
 
         <div class="result" id="result"></div>
     </div>
 
-    <script src="script.js"></script>
-</body>
-</html>
+    <script>
+        document.getElementById('fetchWeather').addEventListener('click', function() {
+            navigator.geolocation.getCurrentPosition(fetchWeatherData, handleGeolocationError);
+        });
+
+        document.getElementById('calculateIrrigation').addEventListener('click', calculateIrrigation);
+
+        function handleGeolocationError(error) {
+            alert('Geolocation error: ' + error.message);
+        }
+
+        function fetchWeatherData(position) {
+            const lat = position.coords.latitude.toFixed(4);
+            const lon = position.coords.longitude.toFixed(4);
+
+            // Fetch weather data from Yr.no using proxy server
+            const apiUrl = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
+
+            // Use your AWS proxy server URL
+            const proxyUrl = 'https://x47ozxapli.execute-api.ap-southeast-2.amazonaws.com'; // Replace with your actual proxy URL
+
+            fetch(proxyUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: apiUrl,
+                    headers: {
+                        'User-Agent': 'IrrigationCalculator/1.0 (your-email@example.com)'
+                    }
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Parse the weather data
+                const timeseries = data.properties.timeseries;
+                const nextHourData = timeseries[0];
+                const instantDetails = nextHourData.data.instant.details;
+                const airTemperature = instantDetails.air_temperature;
+                const relativeHumidity = instantDetails.relative_humidity;
+                const windSpeed = instantDetails.wind_speed;
+                const solarRadiation = instantDetails.global_radiation || 15; // Example fallback value
+                const groundTemperature = instantDetails.ground_temperature || airTemperature - 3; // Example for ground temperature approximation
+                const precipitationAmount = nextHourData.data.next_1_hours?.details?.precipitation_amount || 0;
+
+                // Enhanced ET₀ calculation using Penman-Monteith equation
+                const T_max = airTemperature; // Using current temperature as a proxy
+                const T_minDrop = parseFloat(document.getElementById('T_minDrop').value) || 2; // Configurable minimum temperature drop
+                const T_min = airTemperature - T_minDrop;
+                const T_avg = (T_max + T_min) / 2;
+                const Ra = 0.0820; // Approximate extraterrestrial radiation (MJ/m²/day)
+                const windFactor = 0.000665 * (1 + 0.34 * windSpeed);
+                const humidityFactor = 0.408 * ((airTemperature - T_min) / (solarRadiation + 1));
+                const soilTempFactor = 0.1 * (groundTemperature - T_avg); // Added factor for ground temperature influence
+                const ET0 = 0.0023 * (T_avg + 17.8) * Math.pow((T_max - T_min), 0.5) * Ra + windFactor + humidityFactor + soilTempFactor;
+
+                document.getElementById('weatherInfo').innerHTML = `
+                    <p>Temperature: ${airTemperature} °C</p>
+                    <p>Relative Humidity: ${relativeHumidity} %</p>
+                    <p>Wind Speed: ${windSpeed} m/s</p>
+                    <p>Solar Radiation: ${solarRadiation} MJ/m²/day</p>
+                    <p>Ground Temperature: ${groundTemperature} °C</p>
+                    <p>Reference Evapotranspiration (ET₀): ${ET0.toFixed(2)} mm/day</p>
+                    <p>Forecasted Precipitation: ${precipitationAmount} mm</p>
+                `;
+            })
+            .catch(error => {
+                console.error('Error fetching weather data:', error);
+                alert('Failed to fetch weather data.');
+            });
+        }
+
+        function calculateIrrigation() {
+            const cropType = document.getElementById('cropType').value;
+            const growthStage = document.getElementById('growthStage').value;
+            const soilMoisture = parseFloat(document.getElementById('soilMoisture').value);
+            const fieldCapacity = parseFloat(document.getElementById('fieldCapacity').value);
+            const wiltingPoint = parseFloat(document.getElementById('wiltingPoint').value);
+            const rootDepth = parseFloat(document.getElementById('rootDepth').value);
+            const irrigationEfficiency = parseFloat(document.getElementById('irrigationEfficiency').value);
+            const pValue = parseFloat(document.getElementById('pValue').value);
+            const efficiencyFactor = 0.8; // Assuming an efficiency factor for effective rainfall
+            const kcAdj = parseFloat(document.getElementById('kcAdj').value) || 1; // Adjustment factor for Kc based on management
+
+            // Input validation
+            if (!cropType || !growthStage || isNaN(soilMoisture) || isNaN(fieldCapacity) ||
+                isNaN(wiltingPoint) || isNaN(rootDepth) || isNaN(irrigationEfficiency) ||
+                isNaN(pValue)) {
+                alert('Please fill in all fields and fetch weather data.');
+                return;
+            }
+
+            // Retrieve Kc value
+            const
