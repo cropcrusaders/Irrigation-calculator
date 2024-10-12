@@ -64,6 +64,8 @@
         <div class="result" id="result"></div>
     </div>
 
+    <iframe width="650" height="450" src="https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=default&metricTemp=default&metricWind=default&zoom=6&overlay=wind&product=ecmwf&level=surface&lat=-37.503&lon=144.865" frameborder="0"></iframe>
+
     <script>
         document.getElementById('fetchWeather').addEventListener('click', function() {
             navigator.geolocation.getCurrentPosition(fetchWeatherData, handleGeolocationError);
@@ -158,4 +160,58 @@
             }
 
             // Retrieve Kc value
-            const
+            const Kc = cropCoefficients[cropType][growthStage] * kcAdj;
+
+            // Calculate ETc
+            const ETc = ET0 * Kc;
+
+            // Calculate Effective Rainfall (Pe)
+            const Pe = precipitation * efficiencyFactor;
+
+            // Net Irrigation Requirement (Ir)
+            const Ir = Math.max(ETc - Pe, 0); // Ensure Ir is non-negative
+
+            // Gross Irrigation Requirement (Ig)
+            const Ig = Ir / irrigationEfficiency;
+
+            // Available Water Capacity (AWC)
+            const AWC = (fieldCapacity - wiltingPoint) * rootDepth / 100;
+
+            // Readily Available Water (RAW)
+            const RAW = pValue * AWC;
+
+            // Soil Moisture Deficit (SMD)
+            const SMD = (fieldCapacity - soilMoisture) * rootDepth / 100;
+
+            // Irrigation Interval (Ti)
+            let Ti;
+            if (ETc > 0) {
+                Ti = RAW / ETc;
+            } else {
+                Ti = 0; // Set Ti to 0 to prevent division by zero
+            }
+
+            // Determine if irrigation is needed
+            const irrigationNeeded = SMD >= RAW && SMD > 0 && RAW > 0;
+
+            // Calculate mm required for lateral moves and center pivots
+            const mmRequired = Ig * 10; // Convert cm to mm for irrigation requirement
+
+            // Display results
+            document.getElementById('result').innerHTML = `
+                <h2>Irrigation Schedule</h2>
+                <p><strong>Crop Evapotranspiration (ETc):</strong> ${ETc.toFixed(2)} mm/day</p>
+                <p><strong>Effective Rainfall (Pe):</strong> ${Pe.toFixed(2)} mm/day</p>
+                <p><strong>Net Irrigation Requirement (Ir):</strong> ${Ir.toFixed(2)} mm/day</p>
+                <p><strong>Gross Irrigation Requirement (Ig):</strong> ${Ig.toFixed(2)} cm/day</p>
+                <p><strong>Available Water Capacity (AWC):</strong> ${AWC.toFixed(2)} mm</p>
+                <p><strong>Readily Available Water (RAW):</strong> ${RAW.toFixed(2)} mm</p>
+                <p><strong>Soil Moisture Deficit (SMD):</strong> ${SMD.toFixed(2)} mm</p>
+                <p><strong>Irrigation Interval (Ti):</strong> ${Ti.toFixed(2)} days</p>
+                <p><strong>Irrigation Needed Now:</strong> ${irrigationNeeded ? 'Yes' : 'No'}</p>
+                <p><strong>MM Required for Lateral Moves and Center Pivots:</strong> ${mmRequired.toFixed(2)} mm</p>
+            `;
+        }
+    </script>
+</body>
+</html>
