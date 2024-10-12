@@ -12,7 +12,6 @@ const cropCoefficients = {
         "mid-season": 1.15,
         "late-season": 0.25
     },
-    // Additional 40 crop types for more versatility
     soybean: {
         initial: 0.4,
         development: 0.8,
@@ -64,36 +63,25 @@ function fetchWeatherData(position) {
     const lat = position.coords.latitude.toFixed(4);
     const lon = position.coords.longitude.toFixed(4);
 
-    // Fetch weather data from Yr.no using proxy server
-    const apiUrl = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
+    // Fetch weather data from Windy API
+    const apiKey = 'rMjfan9E0t31FPtqz2g16WZsFRm4gqvU';
+    const apiUrl = `https://api.windy.com/api/point-forecast/v2?lat=${lat}&lon=${lon}&model=gfs&parameters=temp,wind,precip&key=${apiKey}`;
 
-    // Use your AWS proxy server URL
-    const proxyUrl = 'https://x47ozxapli.execute-api.ap-southeast-2.amazonaws.com'; // Replace with your actual proxy URL
-
-    fetch(proxyUrl, {
-        method: 'POST',
+    fetch(apiUrl, {
         headers: {
             'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            url: apiUrl,
-            headers: {
-                'User-Agent': 'IrrigationCalculator/1.0 (your-email@example.com)'
-            }
-        })
+        }
     })
     .then(response => response.json())
     .then(data => {
         // Parse the weather data
-        const timeseries = data.properties.timeseries;
-        const nextHourData = timeseries[0];
-        const instantDetails = nextHourData.data.instant.details;
-        const airTemperature = instantDetails.air_temperature;
-        const relativeHumidity = instantDetails.relative_humidity;
-        const windSpeed = instantDetails.wind_speed;
-        const solarRadiation = instantDetails.global_radiation || 15; // Example fallback value
-        const groundTemperature = instantDetails.ground_temperature || airTemperature - 3; // Example for ground temperature approximation
-        const precipitationAmount = nextHourData.data.next_1_hours?.details?.precipitation_amount || 0;
+        const forecast = data;
+        const airTemperature = forecast.temp;
+        const windSpeed = forecast.wind;
+        const precipitationAmount = forecast.precip || 0;
+        const relativeHumidity = 50; // Example fallback value as Windy does not provide humidity directly
+        const solarRadiation = 15; // Example fallback value as Windy does not provide solar radiation directly
+        const groundTemperature = airTemperature - 3; // Example for ground temperature approximation
 
         // Enhanced ET₀ calculation using Penman-Monteith equation
         const T_max = airTemperature; // Using current temperature as a proxy
